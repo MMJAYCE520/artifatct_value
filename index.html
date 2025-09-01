@@ -140,7 +140,7 @@ const nf = (n,d=2)=> (Math.round((+n||0)*10**d)/10**d).toFixed(d);
 
 /* ---------- 流量統計（Step 2 程式） ---------- */
 /** 統計時區：以 Paramaribo（UTC-3）界定「今日」 */
-const CF_TZ = 'America/Paramaribo';
+const CF_TZ = 'America';
 /** 命名空間：使用 host+path，盡量避免與其他頁面相撞 */
 const NS = encodeURIComponent(location.host + location.pathname.replace(/\W+/g,'_'));
 
