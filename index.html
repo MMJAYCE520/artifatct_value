@@ -3,16 +3,18 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>文物性價比 M&X流浪維護）</title>
+<title>文物性價比 M&X流浪維護（）</title>
+
 <!--
-  修正重點：
-  1) 直接掛上與「舊版可用」完全相同的 XLSX CDN（jsDelivr xlsx@0.18.5）。
-  2) 依序嘗試讀檔：artifacts.xlsx（優先）→ artifacts.csv → artifacts.json。
-  3) Lv.12 視為滿級：不再產生後續步驟，列表行顯示「已滿級」標籤。
-  4) 匯出：若偵測到 XLSX 程式庫則輸出 .xlsx，否則自動輸出 .csv（Excel 可直接開）。
-  5) 完全移除訪客統計，避免境外請求導致頁面阻塞。
+【目的】
+1) 解決「一直讀取中」：若境內無法連到國際 CDN，會先嘗試**同目錄本地檔** ./xlsx.full.min.js，失敗再依序改抓
+   - https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js（中國常見可用）
+   - https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js（你舊版使用者能開的來源）
+   → 若三者都失敗，仍可用 CSV/JSON 或示例資料啟動，不會卡在「讀取中」。
+2) 保留既有 RWD、Lv.12 滿級處理、匯出 Excel/CSV、攻擊/生命 ×（狂熱/基礎白字/領主隨隊 × 步/弓/騎）欄位。
+3) 完全移除訪客統計，避免境外請求導致頁面開不起來。
 -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <style>
   :root{--bg:#0b1220;--card:#0f172a;--line:#1f2937;--muted:#94a3b8;--fg:#e5e7eb;--chip:#192235;--chipfg:#cbd5e1;--acc:#38bdf8}
   *{box-sizing:border-box}
@@ -42,7 +44,7 @@
   .cell-name{white-space:normal;overflow-wrap:anywhere}
   td,th{white-space:nowrap}
   td{overflow:hidden;text-overflow:ellipsis}
-  .maxed-row{opacity:.9}
+  .maxed-row{opacity:.92}
   @media (max-width:1024px){.row.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media (max-width:640px){.wrap{padding:0 12px}.row.c4{grid-template-columns:1fr}}
   @media (max-width:640px){#tableArtifacts th:nth-child(3),#tableArtifacts td:nth-child(3),#tableArtifacts th:nth-child(4),#tableArtifacts td:nth-child(4),#tableArtifacts th:nth-child(6),#tableArtifacts td:nth-child(6),#tableArtifacts th:nth-child(7),#tableArtifacts td:nth-child(7),#tableArtifacts th:nth-child(9),#tableArtifacts td:nth-child(9){display:none}}
@@ -62,7 +64,7 @@
       <div><div class="muted">1 本金書 = 人民幣（元）</div><input id="price" type="number" step="0.01" value="1.76"></div>
       <div><div class="muted">資料來源</div><span id="dataSrc" class="pill">讀取中…</span></div>
     </div>
-    <div class="hint">把 <b>artifacts.xlsx</b> 放在與本頁同資料夾即可；若讀不到，會自動嘗試 <b>artifacts.csv</b> → <b>artifacts.json</b>。</div>
+    <div class="hint">建議把 <b>xlsx.full.min.js</b> 與 <b>artifacts.xlsx</b> 都放在與本頁同資料夾；否則將依序嘗試國內外 CDN。</div>
   </div>
 
   <!-- KPI -->
@@ -143,30 +145,27 @@
 </div>
 
 <script>
-/* ===== 共用小工具 ===== */
+/* ================= 工具 ================= */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const nf = (n,d=2)=> (Math.round((+n||0)*10**d)/10**d).toFixed(d);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function fetchWithTimeout(url, opts={}){ const {timeout=10000, ...rest}=opts; const ctrl=new AbortController(); const id=setTimeout(()=>ctrl.abort(), timeout); return fetch(url,{...rest, signal:ctrl.signal}).finally(()=>clearTimeout(id)); }
 
-/* ===== 遊戲常數 ===== */
+/* ================= 遊戲常數 ================= */
 const CUM_PCT = {5:0.40,6:0.48,7:0.56,8:0.64,9:0.73,10:0.82,11:0.91,12:1.00};
 const GOLD_BOOKS_FROM = {5:40/6, 6:80/6, 7:120/6, 8:40, 9:80, 10:120, 11:160};
 const PURPLE_PER_GOLD = 6, BLUE_PER_GOLD = 36, GREEN_PER_GOLD = 216;
 let RAW = []; let ITEMS = []; let STATE = {weights:{atk:1, hp:0.9}, price:1.76, onlyChecked:false, search:''};
 
-/* ===== 計算邏輯 ===== */
+/* ================= 計算邏輯 ================= */
 function stepInc(total12, fromLv){ if(!(fromLv>=5 && fromLv<=11)) return 0; const a=CUM_PCT[fromLv], b=CUM_PCT[fromLv+1]; return (b-a)*(Number(total12)||0); }
 function collectStepRows(item, fromLv){ const rows=[]; for(const r of item.rows){ rows.push({base:r.base, kind:r.kind, troop:r.troop, inc:stepInc(r.total12, fromLv)}); } return rows; }
-function aggregate(rows, w){
-  const troops={步:{atk:0,hp:0}, 弓:{atk:0,hp:0}, 騎:{atk:0,hp:0}, 全軍:{atk:0,hp:0}};
-  const byTagTroop={'狂熱':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'基礎白字':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'領主隨隊':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}}};
-  for(const r of rows){ const t=troops[r.troop]||troops.全軍; if(r.kind==='atk') t.atk+=r.inc; if(r.kind==='hp') t.hp+=r.inc; const b=byTagTroop[r.base] && byTagTroop[r.base][r.troop]; if(b){ if(r.kind==='atk') b.atk+=r.inc; if(r.kind==='hp') b.hp+=r.inc; } }
-  const atk=troops.步.atk+troops.弓.atk+troops.騎.atk+troops.全軍.atk; const hp=troops.步.hp+troops.弓.hp+troops.騎.hp+troops.全軍.hp; const eq=atk*w.atk + hp*w.hp; return {troops,byTagTroop,atk,hp,eq};
-}
+function aggregate(rows, w){ const troops={步:{atk:0,hp:0}, 弓:{atk:0,hp:0}, 騎:{atk:0,hp:0}, 全軍:{atk:0,hp:0}}; const byTagTroop={'狂熱':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'基礎白字':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'領主隨隊':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}}; for(const r of rows){ const t=troops[r.troop]||troops.全軍; if(r.kind==='atk') t.atk+=r.inc; if(r.kind==='hp') t.hp+=r.inc; const b=byTagTroop[r.base] && byTagTroop[r.base][r.troop]; if(b){ if(r.kind==='atk') b.atk+=r.inc; if(r.kind==='hp') b.hp+=r.inc; } } const atk=troops.步.atk+troops.弓.atk+troops.騎.atk+troops.全軍.atk; const hp=troops.步.hp+troops.弓.hp+troops.騎.hp+troops.全軍.hp; const eq=atk*w.atk + hp*w.hp; return {troops,byTagTroop,atk,hp,eq}; }
 function groupItems(){ const map=new Map(); for(const r of RAW){ if(!map.has(r.name)) map.set(r.name,{name:r.name,rarity:r.rarity,icon:r.icon,lv:5,checked:false,rows:[]}); map.get(r.name).rows.push(r); } ITEMS=Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')); }
 function calcAll(){ const w=STATE.weights, price=STATE.price; let kAtk=0,kHp=0,kEq=0,kGold=0; const tagSum={'狂熱':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'基礎白字':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},'領主隨隊':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}}; const troopSum={步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0},全軍:{atk:0,hp:0}}; const listRows=[]; for(const it of ITEMS){ if(STATE.search && !it.name.includes(STATE.search)) continue; if(STATE.onlyChecked && !it.checked) continue; const curLv=Math.max(5,Math.min(12,Number(it.lv)||5)); let allRows=[], gold=0; if(curLv<=11){ for(let lv=curLv; lv<=11; lv++){ allRows=allRows.concat(collectStepRows(it,lv)); gold+=GOLD_BOOKS_FROM[lv]||0; } } const agg=aggregate(allRows,w); const cost=gold*price, unit=agg.eq>0?cost/agg.eq:Infinity; listRows.push({it,agg,gold,cost,unit}); if(it.checked){ kAtk+=agg.atk; kHp+=agg.hp; kEq+=agg.eq; kGold+=gold; for(const tag of Object.keys(tagSum)){ for(const t of ['步','弓','騎']){ tagSum[tag][t].atk+=agg.byTagTroop[tag][t].atk; tagSum[tag][t].hp+=agg.byTagTroop[tag][t].hp; } } for(const t of Object.keys(troopSum)){ troopSum[t].atk+=agg.troops[t].atk; troopSum[t].hp+=agg.troops[t].hp; } } } return {listRows,kAtk,kHp,kEq,kGold,tagSum,troopSum}; }
 
-/* ===== 渲染 ===== */
+/* ================= 渲染 ================= */
 function tdRight(txt){ const td=document.createElement('td'); td.className='right'; td.textContent=txt; return td; }
 function renderAll(){ STATE.weights.atk=Number($('#wAtk').value)||1; STATE.weights.hp=Number($('#wHp').value)||0.9; STATE.price=Number($('#price').value)||1.76; const totalCnt=ITEMS.length; const checkedCnt=ITEMS.reduce((n,it)=>n+(it.checked?1:0),0); $('#cntArtifacts').textContent=`文物：已選 ${checkedCnt} / 全部 ${totalCnt}`; const {listRows,kAtk,kHp,kEq,kGold,tagSum,troopSum}=calcAll(); const body=$('#tblArtifacts'); body.innerHTML=''; listRows.sort((a,b)=>a.unit-b.unit); for(const r of listRows){ const tr=document.createElement('tr'); const td0=document.createElement('td'); td0.innerHTML=`<input type="checkbox" ${r.it.checked?'checked':''}/>`; td0.querySelector('input').addEventListener('change',e=>{ r.it.checked=e.target.checked; renderAll(); }); tr.appendChild(td0); const nameTd=document.createElement('td'); nameTd.className='cell-name'; nameTd.textContent=r.it.name; if(Number(r.it.lv)===12){ const chip=document.createElement('span'); chip.className='pill pill-muted'; chip.style.marginLeft='8px'; chip.textContent='已滿級'; nameTd.appendChild(chip); tr.classList.add('maxed-row'); } tr.appendChild(nameTd); const rc=r.it.rarity==='金'?'rar-gold':(r.it.rarity==='紫'?'rar-purple':''); const tdR=document.createElement('td'); tdR.innerHTML=`<span class="tag ${rc}">${r.it.rarity||''}</span>`; tr.appendChild(tdR); const tags=Array.from(new Set(r.it.rows.map(x=>x.base))).join(' / '); const tdT=document.createElement('td'); tdT.innerHTML=`<div class="flex">${tags.split('/').map(t=>`<span class="tag">${t.trim()}</span>`).join(' ')}</div>`; tr.appendChild(tdT); const tdLv=document.createElement('td'); const sel=document.createElement('select'); for(let i=5;i<=12;i++){ const o=document.createElement('option'); o.value=i; o.textContent='Lv.'+i; sel.appendChild(o);} sel.value=r.it.lv; sel.addEventListener('change',e=>{ r.it.lv=Number(e.target.value); renderAll(); }); tdLv.appendChild(sel); tr.appendChild(tdLv); tr.appendChild(tdRight(nf(r.agg.atk))); tr.appendChild(tdRight(nf(r.agg.hp))); tr.appendChild(tdRight(nf(r.agg.eq))); const tdB=tdRight(nf(r.gold,2)); tdB.title=`${nf(r.gold*PURPLE_PER_GOLD,0)} 紫書`; tr.appendChild(tdB); tr.appendChild(tdRight(nf(r.cost))); tr.appendChild(tdRight(r.agg.eq>0?nf(r.cost/r.agg.eq):'—')); body.appendChild(tr);} $('#kAtk').textContent=nf(kAtk); $('#kHp').textContent=nf(kHp); $('#kEq').textContent=nf(kEq); $('#kCost').textContent=`${nf(kGold,2)} / ${nf(kGold*STATE.price)}`; $('#kConv').textContent=`≈ ${nf(kGold*PURPLE_PER_GOLD,0)} 紫書、${nf(kGold*BLUE_PER_GOLD,0)} 藍書、${nf(kGold*GREEN_PER_GOLD,0)} 綠書`; renderSteps(); renderTotals(tagSum,troopSum); }
 function renderSteps(){ const tb=$('#tblSteps'); tb.innerHTML=''; const price=STATE.price, w=STATE.weights; const rows=[]; for(const it of ITEMS){ if(!it.checked) continue; const curLv=Math.max(5,Math.min(12,Number(it.lv)||5)); if(curLv<=11){ for(let lv=curLv; lv<=11; lv++){ const rws=collectStepRows(it,lv); const agg=aggregate(rws,w); const gold=GOLD_BOOKS_FROM[lv]||0; const cost=gold*price; const unit=agg.eq>0?cost/agg.eq:Infinity; const tags=Array.from(new Set(it.rows.map(x=>x.base))).join(' / '); rows.push({it,lv,agg,gold,cost,unit,tags}); } } } rows.sort((a,b)=>a.unit-b.unit); for(const r of rows){ const tr=document.createElement('tr'); tr.innerHTML=`
@@ -187,77 +186,28 @@ function renderTotals(tag,troop){ const tg=$('#tagTotals'); tg.innerHTML=''; con
         ${['步','弓','騎'].map(t=>{ const atk=obj[t].atk, hp=obj[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; return `<tr><td>${t}</td><td class="right">${nf(atk)}</td><td class="right">${nf(hp)}</td><td class="right">${nf(eq)}</td></tr>`; }).join('')}
       </tbody>`; wrap.appendChild(tbl); tg.appendChild(wrap); }; renderTag('狂熱',tag['狂熱']); renderTag('基礎白字',tag['基礎白字']); renderTag('領主隨隊',tag['領主隨隊']); const tt=$('#troopTotals'); tt.innerHTML=''; for(const t of ['步','弓','騎','全軍']){ const atk=troop[t].atk, hp=troop[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; const tr=document.createElement('tr'); tr.innerHTML=`<td>${t}</td><td class="right">${nf(atk)}</td><td class="right">${nf(hp)}</td><td class="right">${nf(eq)}</td>`; tt.appendChild(tr);} }
 
-/* ===== 匯出（XLSX / CSV） ===== */
+/* ================= 匯出（XLSX / CSV） ================= */
 function autoColWidths(data, headers){ const cols=headers.map(h=>({wch:Math.max((h||'').toString().length,6)})); for(const row of data){ headers.forEach((h,i)=>{ const v=row[h]; const len=(v===null||v===undefined)?0:String(v).length; if(len>cols[i].wch) cols[i].wch=len; }); } return cols; }
 async function exportSteps(){ const w=STATE.weights, price=STATE.price; const out=[]; for(const it of ITEMS){ if(!it.checked) continue; const curLv=Math.max(5,Math.min(12,Number(it.lv)||5)); if(curLv>11) continue; const tags=Array.from(new Set(it.rows.map(x=>x.base))).join(' / '); for(let lv=curLv; lv<=11; lv++){ const rws=collectStepRows(it,lv); const agg=aggregate(rws,w); const gold=GOLD_BOOKS_FROM[lv]||0; const cost=gold*price; const unit=agg.eq>0?cost/agg.eq:''; const row={ Artifact:it.name, FromLv:lv, ToLv:lv+1, Tags:tags, InfAtk:+agg.troops['步'].atk.toFixed(4), BowAtk:+agg.troops['弓'].atk.toFixed(4), CavAtk:+agg.troops['騎'].atk.toFixed(4), Atk:+agg.atk.toFixed(4), InfHP:+agg.troops['步'].hp.toFixed(4), BowHP:+agg.troops['弓'].hp.toFixed(4), CavHP:+agg.troops['騎'].hp.toFixed(4), HP:+agg.hp.toFixed(4), EqAttr:+agg.eq.toFixed(4), GoldBooks:+gold.toFixed(4), Cost_CNY:+cost.toFixed(4), CNY_per_Eq: unit===''?'':+unit.toFixed(4) }; const bases=['狂熱','基礎白字','領主隨隊']; const troops=['步','弓','騎']; for(const b of bases){ for(const t of troops){ const atkVal=(agg.byTagTroop[b]&&agg.byTagTroop[b][t])?agg.byTagTroop[b][t].atk:0; const hpVal=(agg.byTagTroop[b]&&agg.byTagTroop[b][t])?agg.byTagTroop[b][t].hp:0; row[`${b}_${t}_Atk`]=+atkVal.toFixed(4); row[`${b}_${t}_HP`]=+hpVal.toFixed(4); } } out.push(row); } } if(out.length===0){ alert('目前沒有可匯出的步驟（請勾選文物，且等級不可為 Lv.12）'); return; } if(window.XLSX){ const headers=['Artifact','FromLv','ToLv','Tags','InfAtk','BowAtk','CavAtk','Atk','InfHP','BowHP','CavHP','HP','EqAttr','GoldBooks','Cost_CNY','CNY_per_Eq','狂熱_步_Atk','狂熱_弓_Atk','狂熱_騎_Atk','基礎白字_步_Atk','基礎白字_弓_Atk','基礎白字_騎_Atk','領主隨隊_步_Atk','領主隨隊_弓_Atk','領主隨隊_騎_Atk','狂熱_步_HP','狂熱_弓_HP','狂熱_騎_HP','基礎白字_步_HP','基礎白字_弓_HP','基礎白字_騎_HP','領主隨隊_步_HP','領主隨隊_弓_HP','領主隨隊_騎_HP']; const ws=XLSX.utils.json_to_sheet(out,{header:headers}); ws['!cols']=autoColWidths(out,headers); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Steps'); const d=new Date(); const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), day=('0'+d.getDate()).slice(-2), hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2); const fname=`mx_artifact_steps_${y}${m}${day}_${hh}${mm}.xlsx`; XLSX.writeFile(wb,fname); } else { const headers=Object.keys(out[0]); const rows=[headers.join(',')].concat(out.map(o=>headers.map(h=>{ const v=o[h]; if(v===null||v===undefined) return ''; const s=String(v).replace(/"/g,'""'); return (/,|\n|\r|"/.test(s))? '"'+s+'"' : s; }).join(','))); const blob=new Blob(["\ufeff"+rows.join('\n')],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); const d=new Date(); const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), day=('0'+d.getDate()).slice(-2), hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2); a.download=`mx_artifact_steps_${y}${m}${day}_${hh}${mm}.csv`; a.click(); URL.revokeObjectURL(a.href); } }
 
-/* ===== 資料載入：優先 XLSX → CSV → JSON ===== */
+/* ================= CSV/JSON parser ================= */
 function csvParse(text){ const rows=[]; let cur=[], val=''; let inQ=false; for(let i=0;i<text.length;i++){ const c=text[i]; const n=text[i+1]; if(inQ){ if(c==='"' && n==='"'){ val+='"'; i++; } else if(c==='"'){ inQ=false; } else { val+=c; } } else { if(c==='"'){ inQ=true; } else if(c===','){ cur.push(val); val=''; } else if(c==='\n'){ cur.push(val); rows.push(cur); cur=[]; val=''; } else if(c==='\r'){ } else { val+=c; } } } if(val.length || cur.length) { cur.push(val); rows.push(cur); } return rows; }
 function headerIndexMap(headers, aliases){ const map={}; const low=headers.map(h=>String(h||'').trim()); for(const key in aliases){ const list=aliases[key]; let idx=-1; for(const a of list){ const t=a.toLowerCase(); idx=low.findIndex(h=>h.toLowerCase()===t); if(idx!==-1) break; } if(idx!==-1) map[key]=idx; } return map; }
 function rowToObj(row, idxMap){ return { name: String(row[idxMap.name]||'').trim(), rarity: String(row[idxMap.rarity]||'').trim(), base: String(row[idxMap.base]||'').trim(), kind: String(row[idxMap.kind]||'').trim(), troop: String(row[idxMap.troop]||'').trim(), label: String(row[idxMap.label]||'').trim(), total12: Number(row[idxMap.total12]||0), icon: String(row[idxMap.icon]||'').trim() }; }
 
-async function tryLoadXLSX(){
-  try{
-    if(!window.XLSX) throw new Error('NO_XLSX_LIB');
-    const res = await fetch('./artifacts.xlsx?ts='+Date.now(), {cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const ab = await res.arrayBuffer();
-    const wb = XLSX.read(ab,{type:'array'});
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-    if(!rows.length) throw new Error('EMPTY');
-    RAW = rows.map(r=>({
-      name:String(r.Artifact||r.Name||r.名稱||r.文物||'').trim(),
-      rarity:String(r.Rarity||r.稀有度||'').trim(),
-      base:String(r.Base||r.標籤||r.類別||'').trim(),
-      kind:String(r.Kind||r.屬性||r.類型||'').trim(),
-      troop:String(r.Troop||r.兵種||'').trim(),
-      label:String(r.Label||r.備註||'').trim(),
-      total12:Number(r.Total12||r.Total_12||r.總量12||r.Total||0),
-      icon:String(r.IconURL||r.Icon||r.圖示||'').trim()
-    }));
-    $('#dataSrc').textContent='資料來源：artifacts.xlsx（同目錄）';
-    return true;
-  }catch(e){ return false; }
-}
-async function tryLoadCSV(){
-  try{
-    const r=await fetch('./artifacts.csv',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
-    const t=await r.text(); const rows=csvParse(t); if(rows.length<2) throw new Error('EMPTY');
-    const headers=rows[0];
-    const aliases={ name:['Artifact','Name','名稱','文物'], rarity:['Rarity','稀有度'], base:['Base','標籤','類別'], kind:['Kind','屬性','類型','type'], troop:['Troop','兵種'], label:['Label','備註'], total12:['Total12','總量12','Total_12','Total'], icon:['IconURL','Icon','圖示'] };
-    const idx=headerIndexMap(headers,aliases);
-    if(idx.name==null||idx.rarity==null||idx.base==null||idx.kind==null||idx.troop==null||idx.total12==null) throw new Error('HEADER_MISSING');
-    RAW=rows.slice(1).filter(r=>r.some(x=>String(x).trim().length)).map(r=>rowToObj(r,idx));
-    $('#dataSrc').textContent='資料來源：artifacts.csv（同目錄）';
-    return true;
-  }catch(e){ return false; }
-}
-async function tryLoadJSON(){
-  try{
-    const r=await fetch('./artifacts.json',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
-    const j=await r.json(); if(!Array.isArray(j)||!j.length) throw new Error('EMPTY');
-    RAW=j.map(x=>({ name:String(x.Artifact||x.name||'').trim(), rarity:String(x.Rarity||x.rarity||'').trim(), base:String(x.Base||x.base||'').trim(), kind:String(x.Kind||x.kind||'').trim(), troop:String(x.Troop||x.troop||'').trim(), label:String(x.Label||x.label||'').trim(), total12:Number(x.Total12||x.total12||0), icon:String(x.IconURL||x.icon||'').trim() }));
-    $('#dataSrc').textContent='資料來源：artifacts.json（同目錄）';
-    return true;
-  }catch(e){ return false; }
-}
-async function loadData(){
-  let ok = await tryLoadXLSX();
-  if(!ok) ok = await tryLoadCSV();
-  if(!ok) ok = await tryLoadJSON();
-  if(!ok){
-    RAW = [
-      {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'步',label:'atk',total12:9,icon:''},
-      {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'騎',label:'atk',total12:9,icon:''},
-      {name:'乳酪之星',rarity:'金',base:'狂熱',kind:'atk',troop:'弓',label:'atk',total12:5,icon:''},
-    ];
-    $('#dataSrc').innerHTML='資料來源：<b>示例資料</b>（未找到 artifacts.xlsx / .csv / .json；若你是用 <code>file://</code> 開啟，請改用 HTTP 服務，以允許 <code>fetch()</code> 讀檔）';
-  }
-  groupItems(); renderAll();
+/* ================= 資料載入（XLSX→CSV→JSON） ================= */
+async function tryLoadXLSX(){ try{ if(!window.XLSX) throw new Error('NO_XLSX_LIB'); const res = await fetchWithTimeout('./artifacts.xlsx?ts='+Date.now(), {cache:'no-store', timeout:12000}); if(!res.ok) throw new Error('HTTP '+res.status); const ab = await res.arrayBuffer(); const wb = XLSX.read(ab,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(ws,{defval:''}); if(!rows.length) throw new Error('EMPTY'); RAW = rows.map(r=>({ name:String(r.Artifact||r.Name||r.名稱||r.文物||'').trim(), rarity:String(r.Rarity||r.稀有度||'').trim(), base:String(r.Base||r.標籤||r.類別||'').trim(), kind:String(r.Kind||r.屬性||r.類型||'').trim(), troop:String(r.Troop||r.兵種||'').trim(), label:String(r.Label||r.備註||'').trim(), total12:Number(r.Total12||r.Total_12||r.總量12||r.Total||0), icon:String(r.IconURL||r.Icon||r.圖示||'').trim() })); $('#dataSrc').textContent='資料來源：artifacts.xlsx（同目錄）'; return true; }catch(e){ console.warn('tryLoadXLSX failed:', e); return false; } }
+async function tryLoadCSV(){ try{ const r=await fetchWithTimeout('./artifacts.csv',{cache:'no-store', timeout:6000}); if(!r.ok) throw new Error('HTTP '+r.status); const t=await r.text(); const rows=csvParse(t); if(rows.length<2) throw new Error('EMPTY'); const headers=rows[0]; const aliases={ name:['Artifact','Name','名稱','文物'], rarity:['Rarity','稀有度'], base:['Base','標籤','類別'], kind:['Kind','屬性','類型','type'], troop:['Troop','兵種'], label:['Label','備註'], total12:['Total12','總量12','Total_12','Total'], icon:['IconURL','Icon','圖示'] }; const idx=headerIndexMap(headers,aliases); if(idx.name==null||idx.rarity==null||idx.base==null||idx.kind==null||idx.troop==null||idx.total12==null) throw new Error('HEADER_MISSING'); RAW=rows.slice(1).filter(r=>r.some(x=>String(x).trim().length)).map(r=>rowToObj(r,idx)); $('#dataSrc').textContent='資料來源：artifacts.csv（同目錄）'; return true; }catch(e){ console.warn('tryLoadCSV failed:', e); return false; } }
+async function tryLoadJSON(){ try{ const r=await fetchWithTimeout('./artifacts.json',{cache:'no-store', timeout:6000}); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); if(!Array.isArray(j)||!j.length) throw new Error('EMPTY'); RAW=j.map(x=>({ name:String(x.Artifact||x.name||'').trim(), rarity:String(x.Rarity||x.rarity||'').trim(), base:String(x.Base||x.base||'').trim(), kind:String(x.Kind||x.kind||'').trim(), troop:String(x.Troop||x.troop||'').trim(), label:String(x.Label||x.label||'').trim(), total12:Number(x.Total12||x.total12||0), icon:String(x.IconURL||x.icon||'').trim() })); $('#dataSrc').textContent='資料來源：artifacts.json（同目錄）'; return true; }catch(e){ console.warn('tryLoadJSON failed:', e); return false; } }
+
+/* ====== 動態載入 XLSX 程式庫（本地→國內 CDN→jsDelivr） ====== */
+async function ensureXLSX(){ if(window.XLSX) return true; const sources=[ './xlsx.full.min.js', 'https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js' ]; for(const src of sources){ try{ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.defer=true; s.onload=()=>res(); s.onerror=()=>rej(new Error('load fail '+src)); document.head.appendChild(s); }); if(window.XLSX) return true; }catch(e){ console.warn('XLSX src fail:', src, e); await sleep(200); } } return !!window.XLSX; }
+
+/* ================= 啟動流程 ================= */
+async function loadData(){ let ok=false; try{ const hasLib = await ensureXLSX(); if(hasLib) ok = await tryLoadXLSX(); if(!ok) ok = await tryLoadCSV(); if(!ok) ok = await tryLoadJSON(); if(!ok){ RAW = [ {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'步',label:'atk',total12:9,icon:''}, {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'騎',label:'atk',total12:9,icon:''}, {name:'乳酪之星',rarity:'金',base:'狂熱',kind:'atk',troop:'弓',label:'atk',total12:5,icon:''} ]; $('#dataSrc').innerHTML='資料來源：<b>示例資料</b>（未找到 <code>artifacts.xlsx/.csv/.json</code>；或瀏覽器阻擋跨來源讀取。建議把 <code>xlsx.full.min.js</code> 與 <code>artifacts.xlsx</code> 放在同資料夾）'; } groupItems(); renderAll(); }catch(err){ console.error(err); $('#dataSrc').textContent='載入發生錯誤：'+(err&&err.message||err); }
 }
 
-/* ===== 事件註冊與啟動 ===== */
+/* ================= 事件 ================= */
 $('#btnExport').addEventListener('click', exportSteps);
 $('#wAtk').addEventListener('input',renderAll);
 $('#wHp').addEventListener('input',renderAll);
@@ -265,6 +215,7 @@ $('#price').addEventListener('input',renderAll);
 $('#onlyChecked').addEventListener('change',e=>{STATE.onlyChecked=e.target.checked;renderAll();});
 $('#search').addEventListener('input',e=>{STATE.search=e.target.value.trim();renderAll();});
 
+// 啟動
 loadData();
 </script>
 </body>
