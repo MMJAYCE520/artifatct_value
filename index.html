@@ -6,28 +6,17 @@
 <title>文物性價比 M&X流浪維護</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-  :root{
-    --bg:#0b1220;--card:#0f172a;--line:#1f2937;--muted:#94a3b8;--fg:#e5e7eb;
-    --chip:#192235;--chipfg:#cbd5e1;--acc:#38bdf8
-  }
-  /* 基礎排版 */
+  :root{--bg:#0b1220;--card:#0f172a;--line:#1f2937;--muted:#94a3b8;--fg:#e5e7eb;--chip:#192235;--chipfg:#cbd5e1;--acc:#38bdf8}
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
-  body{
-    margin:0;background:var(--bg);color:var(--fg);
-    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;
-    font-size:clamp(13px,1.1vw + .25rem,15px); line-height:1.55;
-  }
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;font-size:clamp(13px,1.1vw + .25rem,15px); line-height:1.55}
   .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
   h1{font-size:20px;margin:0 0 12px}
   .row{display:grid;gap:12px}
   .row.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
   .muted{color:var(--muted)}
-  input,select{
-    width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0b1326;color:var(--fg);
-    min-height:40px
-  }
+  input,select{width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0b1326;color:var(--fg);min-height:40px}
   .pill{display:inline-flex;gap:8px;align-items:center;background:var(--chip);color:var(--chipfg);padding:4px 10px;border-radius:999px;font-size:12px;max-width:100%}
   .btn{background:#111827;border:1px solid var(--line);color:#cbd5e1;padding:6px 10px;border-radius:8px;cursor:pointer}
   .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -36,50 +25,30 @@
   .rar-gold{background:#3b2a00;border-color:#8b5d00;color:#ffd86b}
   .rar-purple{background:#26193b;border-color:#5b2ea6;color:#d3a6ff}
   .hint{font-size:12px;color:#9aa8bf;margin-top:6px}
-
-  /* 表格：RWD 友善 */
   .table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border-radius:10px;border:1px solid var(--line)}
   table{width:100%;border-collapse:collapse;table-layout:auto}
-  th,td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;width:auto !important}
+  th,td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
   th{text-align:left;color:#cbd5e1;white-space:nowrap}
   td.right, th.right{text-align:right}
-  /* 名稱欄允許換行，其餘數字欄盡量不換行避免堆疊 */
   .cell-name{white-space:normal;overflow-wrap:anywhere}
   td,th{white-space:nowrap}
-  /* 在極窄時避免重疊，允許數字欄位收縮顯示省略號 */
   td{overflow:hidden;text-overflow:ellipsis}
-
-  /* 讓卡片網格在平板/手機自適應 */
-  @media (max-width:1024px){
-    .row.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  }
+  @media (max-width:1024px){.row.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:640px){.wrap{padding:0 12px}.row.c4{grid-template-columns:1fr}}
   @media (max-width:640px){
-    .wrap{padding:0 12px}
-    .row.c4{grid-template-columns:1fr}
-  }
-
-  /* 表格欄位收斂策略（手機）——隱藏次要欄位，保留關鍵指標 */
-  /* 左側「文物清單」：保留 勾選 / 文物 / 等級 / 等價屬性 / 金額 / 元/屬性 */
-  @media (max-width:640px){
-    #tableArtifacts th:nth-child(3), #tableArtifacts td:nth-child(3){display:none} /* 稀有度 */
-    #tableArtifacts th:nth-child(4), #tableArtifacts td:nth-child(4){display:none} /* 標籤 */
-    #tableArtifacts th:nth-child(6), #tableArtifacts td:nth-child(6){display:none} /* 本次攻擊 */
-    #tableArtifacts th:nth-child(7), #tableArtifacts td:nth-child(7){display:none} /* 本次生命 */
-    #tableArtifacts th:nth-child(9), #tableArtifacts td:nth-child(9){display:none} /* 金書 */
-  }
-  /* 逐步性價比：保留 變更步驟/名稱 / 等價屬性 / 金書 / 元/屬性 */
-  @media (max-width:640px){
-    #tableSteps th:nth-child(2), #tableSteps td:nth-child(2){display:none} /* 步攻 */
-    #tableSteps th:nth-child(3), #tableSteps td:nth-child(3){display:none} /* 弓攻 */
-    #tableSteps th:nth-child(4), #tableSteps td:nth-child(4){display:none} /* 騎攻 */
-    #tableSteps th:nth-child(5), #tableSteps td:nth-child(5){display:none} /* 攻擊總 */
-    #tableSteps th:nth-child(6), #tableSteps td:nth-child(6){display:none} /* 生命總 */
-    #tableSteps th:nth-child(9), #tableSteps td:nth-child(9){display:none} /* 金額 */
-  }
-  /* 兵種匯總：保留 兵種 / 等價屬性 */
-  @media (max-width:640px){
-    #tableTroopTotals th:nth-child(2), #tableTroopTotals td:nth-child(2){display:none} /* 攻擊 */
-    #tableTroopTotals th:nth-child(3), #tableTroopTotals td:nth-child(3){display:none} /* 生命 */
+    #tableArtifacts th:nth-child(3), #tableArtifacts td:nth-child(3){display:none}
+    #tableArtifacts th:nth-child(4), #tableArtifacts td:nth-child(4){display:none}
+    #tableArtifacts th:nth-child(6), #tableArtifacts td:nth-child(6){display:none}
+    #tableArtifacts th:nth-child(7), #tableArtifacts td:nth-child(7){display:none}
+    #tableArtifacts th:nth-child(9), #tableArtifacts td:nth-child(9){display:none}
+    #tableSteps th:nth-child(2), #tableSteps td:nth-child(2){display:none}
+    #tableSteps th:nth-child(3), #tableSteps td:nth-child(3){display:none}
+    #tableSteps th:nth-child(4), #tableSteps td:nth-child(4){display:none}
+    #tableSteps th:nth-child(5), #tableSteps td:nth-child(5){display:none}
+    #tableSteps th:nth-child(6), #tableSteps td:nth-child(6){display:none}
+    #tableSteps th:nth-child(9), #tableSteps td:nth-child(9){display:none}
+    #tableTroopTotals th:nth-child(2), #tableTroopTotals td:nth-child(2){display:none}
+    #tableTroopTotals th:nth-child(3), #tableTroopTotals td:nth-child(3){display:none}
   }
 </style>
 </head>
@@ -87,18 +56,20 @@
 <div class="wrap">
   <h1>文物性價比 M&X流浪維護</h1>
 
-  <!-- 參數 -->
   <div class="card">
     <div class="row c4">
       <div><div class="muted">1 點攻擊 = 幾點屬性</div><input id="wAtk" type="number" step="0.01" value="1.00"></div>
       <div><div class="muted">1 點生命 = 幾點屬性</div><input id="wHp"  type="number" step="0.01" value="0.90"></div>
       <div><div class="muted">1 本金書 = 人民幣（元）</div><input id="price" type="number" step="0.01" value="1.76"></div>
-      <div><div class="muted">資料來源</div><span id="dataSrc" class="pill">讀取中…</span></div>
+      <div class="flex" style="gap:8px;align-items:center;">
+        <span class="muted">資料來源</span>
+        <span id="dataSrc" class="pill">讀取中…</span>
+        <button id="btnLocal" class="btn">從本機載入</button>
+      </div>
     </div>
-    <div class="hint">把 <b>artifacts.xlsx</b> 放在與本頁同資料夾並重新整理即可更新；欄位：Artifact, Rarity, Base, Kind, Troop, Label, Total12, IconURL。</div>
+    <div class="hint">把 <b>artifacts.xlsx</b> 放在與本頁同資料夾並重新整理即可更新；亦支援 <b>artifacts.csv</b>。欄位：Artifact, Rarity, Base, Kind, Troop, Label, Total12, IconURL。</div>
   </div>
 
-  <!-- KPI -->
   <div class="row c4" style="margin-top:12px">
     <div class="card"><div class="muted">攻擊點＋</div><div id="kAtk" style="font-size:22px">0.00</div></div>
     <div class="card"><div class="muted">生命點＋</div><div id="kHp" style="font-size:22px">0.00</div></div>
@@ -106,27 +77,6 @@
     <div class="card"><div class="muted">金書 / 金額（元）</div><div id="kCost" style="font-size:22px">0 / 0</div><div class="hint" id="kConv"></div></div>
   </div>
 
-  <!-- 流量 KPI -->
-  <div class="row c4" style="margin-top:12px">
-    <div class="card">
-      <div class="muted">今日訪客（近似 UV）</div>
-      <div id="visToday" style="font-size:22px">讀取中…</div>
-    </div>
-    <div class="card">
-      <div class="muted">累計訪客（近似 UV）</div>
-      <div id="visTotal" style="font-size:22px">讀取中…</div>
-    </div>
-    <div class="card">
-      <div class="muted">統計區間（Paramaribo）</div>
-      <div id="visTime" class="hint">America</div>
-    </div>
-    <div class="card">
-      <div class="muted">資料來源</div>
-      <div class="hint">CountAPI（無後端、可直接用）</div>
-    </div>
-  </div>
-
-  <!-- 控制列 -->
   <div class="flex toolbar">
     <span class="pill">排序：元/等價屬性（所有已勾選文物之每一步）</span>
     <span id="cntArtifacts" class="pill">文物：已選 0 / 全部 0</span>
@@ -134,171 +84,129 @@
     <input id="search" placeholder="搜尋名稱…" style="max-width:260px"/>
   </div>
 
-  <!-- 文物清單 -->
   <div class="card">
-    <div class="table-wrap">
-      <table id="tableArtifacts">
-        <thead>
-          <tr>
-            <th>選</th>
-            <th>文物</th>
-            <th>稀有度</th>
-            <th>標籤</th>
-            <th>當前等級</th>
-            <th class="right">本次攻擊</th>
-            <th class="right">本次生命</th>
-            <th class="right">等價屬性</th>
-            <th class="right">金書</th>
-            <th class="right">金額</th>
-            <th class="right">元/屬性</th>
-          </tr>
-        </thead>
-        <tbody id="tblArtifacts"></tbody>
-      </table>
-    </div>
+    <div class="table-wrap"><table id="tableArtifacts">
+      <thead><tr>
+        <th>選</th><th>文物</th><th>稀有度</th><th>標籤</th><th>當前等級</th>
+        <th class="right">本次攻擊</th><th class="right">本次生命</th><th class="right">等價屬性</th>
+        <th class="right">金書</th><th class="right">金額</th><th class="right">元/屬性</th>
+      </tr></thead>
+      <tbody id="tblArtifacts"></tbody>
+    </table></div>
   </div>
 
-  <!-- 逐步性價比（推薦升級順序） -->
   <div class="card" style="margin-top:12px">
-    <div class="flex"><span class="pill">逐步性價比（所有已勾選文物之每一步，以 元/等價屬性 排序）</span></div>
-    <div class="table-wrap">
-      <table id="tableSteps">
-        <thead>
-          <tr>
-            <th>文物 / 標籤 / 兵種</th>
-            <th class="right">步</th><th class="right">弓</th><th class="right">騎</th>
-            <th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th>
-            <th class="right">金書</th><th class="right">金額</th><th class="right">元/屬性</th>
-          </tr>
-        </thead>
-        <tbody id="tblSteps"></tbody>
-      </table>
+    <div class="flex" style="justify-content:space-between;align-items:center">
+      <span class="pill">逐步性價比（所有已勾選文物之每一步，以 元/等價屬性 排序）</span>
+      <button id="btnExport" class="btn">匯出逐步性價比.xlsx</button>
     </div>
+    <div class="table-wrap"><table id="tableSteps">
+      <thead><tr>
+        <th>文物 / 標籤 / 兵種</th>
+        <th class="right">步</th><th class="right">弓</th><th class="right">騎</th>
+        <th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th>
+        <th class="right">金書</th><th class="right">金額</th><th class="right">元/屬性</th>
+      </tr></thead>
+      <tbody id="tblSteps"></tbody>
+    </table></div>
   </div>
 
-  <!-- 標籤匯總 -->
   <div class="card" style="margin-top:12px">
-    <div class="pill">標籤匯總（狂熱 / 基礎白字 / 領主隨隊 × 步/弓/騎）</div>
-    <div id="tagTotals"></div>
+    <div class="pill">標籤匯總（每標籤一行：步攻/弓攻/騎攻/步生/弓生/騎生/等價）</div>
+    <div class="table-wrap"><table id="tableTagTotals">
+      <thead><tr>
+        <th>標籤</th>
+        <th class="right">步攻</th><th class="right">弓攻</th><th class="right">騎攻</th>
+        <th class="right">步生</th><th class="right">弓生</th><th class="right">騎生</th>
+        <th class="right">等價屬性</th>
+      </tr></thead>
+      <tbody id="tagTotals"></tbody>
+    </table></div>
   </div>
 
-  <!-- 兵種匯總 -->
   <div class="card" style="margin-top:12px">
     <div class="pill">兵種匯總</div>
-    <div class="table-wrap">
-      <table id="tableTroopTotals">
-        <thead><tr><th>兵種</th><th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th></tr></thead>
-        <tbody id="troopTotals"></tbody>
-      </table>
-    </div>
+    <div class="table-wrap"><table id="tableTroopTotals">
+      <thead><tr><th>兵種</th><th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th></tr></thead>
+      <tbody id="troopTotals"></tbody>
+    </table></div>
   </div>
 
 </div>
 
 <script>
-/* ---------- 工具 ---------- */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const nf = (n,d=2)=> (Math.round((+n||0)*10**d)/10**d).toFixed(d);
 
-/* ---------- 流量統計（RWD 也修正時區） ---------- */
-const CF_TZ = 'America'; // ← 修正：合法 IANA
-const NS = encodeURIComponent(location.host + location.pathname.replace(/\W+/g,'_'));
-
-function getUid(){
-  let id = localStorage.getItem('mx_uid');
-  if(!id){
-    id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>
-      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-    );
-    localStorage.setItem('mx_uid', id);
-  }
-  return id;
-}
-
-function todayStr(){
-  const d = new Date(new Date().toLocaleString('en-US',{timeZone: CF_TZ}));
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-
-async function hit(key){
-  const r = await fetch(`https://api.countapi.xyz/hit/${NS}/${key}`);
-  if(!r.ok) throw new Error('hit '+key+' '+r.status);
-  const j = await r.json();
-  return j.value ?? 0;
-}
-
-async function get(key){
-  const r = await fetch(`https://api.countapi.xyz/get/${NS}/${key}`);
-  if(!r.ok) throw new Error('get '+key+' '+r.status);
-  const j = await r.json();
-  return j.value ?? 0;
-}
-
-async function updateTraffic(){
-  getUid();
-  const today = todayStr();
-
-  if(!localStorage.getItem('mx_total_counted')){
-    try{ await hit('total_unique'); localStorage.setItem('mx_total_counted','1'); }catch(e){}
-  }
-  const last = localStorage.getItem('mx_last_counted_date');
-  if(last !== today){
-    try{ await hit('day_'+today+'_unique'); localStorage.setItem('mx_last_counted_date', today); }catch(e){}
-  }
-
-  let total = 0, daily = 0;
-  try{ total = await get('total_unique'); }catch(e){}
-  try{ daily = await get('day_'+today+'_unique'); }catch(e){}
-
-  $('#visToday').textContent = daily ? String(daily) : '—';
-  $('#visTotal').textContent = total ? String(total) : '—';
-  $('#visTime').textContent  = `${today} 00:00–23:59 ${CF_TZ}`;
-}
-
-/* 等級累進（祝福、只對 Lv5→12 有意義） */
+/* ---- 常數 ---- */
 const CUM_PCT = {5:0.40,6:0.48,7:0.56,8:0.64,9:0.73,10:0.82,11:0.91,12:1.00};
-/* 書本成本（以金書等價；fromLv: 5..11） */
 const GOLD_BOOKS_FROM = {5:40/6, 6:80/6, 7:120/6, 8:40, 9:80, 10:120, 11:160};
 const PURPLE_PER_GOLD = 6, BLUE_PER_GOLD = 36, GREEN_PER_GOLD = 216;
+const TAGS = ['狂熱','基礎白字','領主隨隊'];
+const TROOPS = ['步','弓','騎'];
 
-let RAW = [];     // from Excel
-let ITEMS = [];   // grouped
+let RAW = [];
+let ITEMS = [];
 let STATE = {weights:{atk:1, hp:0.9}, price:1.76, onlyChecked:false, search:''};
 
-/* ---------- 載入 Excel ---------- */
-async function loadExcel(){
-  try{
-    const res = await fetch('./artifacts.xlsx?ts='+Date.now(), {cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const ab = await res.arrayBuffer();
-    const wb = XLSX.read(ab,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-    RAW = rows.map(r=>({
-      name:String(r.Artifact).trim(),
-      rarity:String(r.Rarity).trim(),
-      base:String(r.Base).trim(),
-      kind:String(r.Kind).trim(),
-      troop:String(r.Troop).trim(),
-      label:String(r.Label||'').trim(),
-      total12:Number(r.Total12||0),
-      icon:String(r.IconURL||'').trim()
-    }));
-    $('#dataSrc').textContent='資料來源：artifacts.xlsx（同目錄）';
-  }catch(e){
+/* ---- 讀檔：優先 artifacts.xlsx，失敗才示例 ---- */
+async function loadExcel() {
+  try {
+    const urlList = ['./artifacts.xlsx','artifacts.xlsx','./data/artifacts.xlsx','data/artifacts.xlsx','./artifacts.csv','artifacts.csv'];
+    let buf=null, csvText=null, src='';
+    for (const u of urlList){
+      try{ const r = await fetch(u+'?ts='+Date.now(), {cache:'no-store'});
+        if(!r.ok) continue; const ct=r.headers.get('content-type')||'';
+        if(ct.includes('text/csv')||u.endsWith('.csv')){ csvText=await r.text(); src=u; break; }
+        buf = await r.arrayBuffer(); src=u; break; }catch(_){/* try next */}
+    }
+    if(buf){
+      const wb = XLSX.read(buf,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+      RAW = rows.map(r=>normRow(r));
+      $('#dataSrc').textContent = '資料來源：'+src;
+    }else if(csvText){
+      const rows = XLSX.utils.sheet_to_json(XLSX.read(csvText,{type:'string'}).Sheets.Sheet1,{defval:''});
+      RAW = rows.map(r=>normRow(r));
+      $('#dataSrc').textContent = '資料來源：'+src;
+    }else{
+      throw new Error('no file');
+    }
+  } catch (e){
     RAW = [
       {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'步',label:'atk',total12:9,icon:''},
       {name:'不朽之鏡',rarity:'金',base:'基礎白字',kind:'atk',troop:'騎',label:'atk',total12:9,icon:''},
-      {name:'乳酪之星',rarity:'金',base:'狂熱',kind:'atk',troop:'弓',label:'atk',total12:5,icon:''},
+      {name:'乳酪之星',rarity:'金',base:'狂熱',kind:'hp',troop:'弓',label:'hp',total12:5,icon:''},
     ];
-    $('#dataSrc').textContent='未找到 Excel/JSON，已使用 內建示例資料。';
+    $('#dataSrc').innerHTML = '未載入<br/>xlsx.full.min.js 或讀檔失敗，已使用內建示例資料。將仍可匯出 CSV/Excel。';
   }
   groupItems();
   renderAll();
 }
+function normRow(r){
+  return {name:String(r.Artifact||r.name||'').trim(),rarity:String(r.Rarity||r.rarity||'').trim(),base:String(r.Base||r.base||'').trim(),kind:String(r.Kind||r.kind||'').trim(),troop:String(r.Troop||r.troop||'').trim(),label:String(r.Label||r.label||'').trim(),total12:Number(r.Total12||r.total12||0),icon:String(r.IconURL||r.icon||'').trim()};
+}
+
+/* 本機載入 */
+$('#btnLocal').addEventListener('click',()=>{
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.csv';
+  inp.onchange = async ()=>{
+    const f = inp.files[0]; if(!f) return;
+    if(f.name.endsWith('.csv')){
+      const text = await f.text();
+      const wb = XLSX.read(text,{type:'string'}); const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws,{defval:''}); RAW = rows.map(normRow);
+      $('#dataSrc').textContent='資料來源：本機檔案 '+f.name; groupItems(); renderAll();
+    }else{
+      const ab = await f.arrayBuffer();
+      const wb = XLSX.read(ab,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
+      RAW = XLSX.utils.sheet_to_json(ws,{defval:''}).map(normRow);
+      $('#dataSrc').textContent='資料來源：本機檔案 '+f.name; groupItems(); renderAll();
+    }
+  };
+  inp.click();
+});
 
 function groupItems(){
   const map = new Map();
@@ -309,58 +217,63 @@ function groupItems(){
   ITEMS = Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
 }
 
-/* ---------- 計算 ---------- */
+/* ---- 計算 ---- */
 function stepInc(total12, fromLv){
-  if(!(fromLv>=5 && fromLv<=11)) return 0;
-  const a = CUM_PCT[fromLv], b = CUM_PCT[fromLv+1];
+  if(!(fromLv>=5 && fromLv<=11)) return 0; const a=CUM_PCT[fromLv], b=CUM_PCT[fromLv+1];
   return (b-a)*(Number(total12)||0);
 }
-
 function collectStepRows(item, fromLv){
   const rows = [];
   for(const r of item.rows){ rows.push({base:r.base, kind:r.kind, troop:r.troop, inc:stepInc(r.total12, fromLv)}); }
   return rows;
 }
-
 function aggregate(rows, weights){
   const troops = {步:{atk:0,hp:0}, 弓:{atk:0,hp:0}, 騎:{atk:0,hp:0}, 全軍:{atk:0,hp:0}};
-  const byTagTroop = { '狂熱':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},
-                       '基礎白字':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},
-                       '領主隨隊':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}} };
+  const byTag = {};
+  for(const tag of TAGS){ byTag[tag]={ atk:{步:0,弓:0,騎:0}, hp:{步:0,弓:0,騎:0} }; }
+
   for(const r of rows){
-    const t = troops[r.troop] || troops.全軍;
-    if(r.kind==='atk') t.atk += r.inc;
-    if(r.kind==='hp')  t.hp  += r.inc;
-    if(byTagTroop[r.base] && byTagTroop[r.base][r.troop]){
-      if(r.kind==='atk') byTagTroop[r.base][r.troop].atk += r.inc;
-      if(r.kind==='hp')  byTagTroop[r.base][r.troop].hp  += r.inc;
+    const inc=r.inc||0; const troopKey = TROOPS.includes(r.troop)? r.troop : '全軍';
+    const t = troops[troopKey];
+    if(r.kind==='atk'){ t.atk += inc; }
+    if(r.kind==='hp'){  t.hp  += inc; }
+
+    // 標籤×兵種：確保每欄各自累加，不互相複製
+    if(byTag[r.base]){
+      if(r.kind==='atk'){
+        if(r.troop==='全軍'){ for(const k of TROOPS) byTag[r.base].atk[k]+=inc; }
+        else if(byTag[r.base].atk[r.troop]!==undefined){ byTag[r.base].atk[r.troop]+=inc; }
+      }else if(r.kind==='hp'){
+        if(r.troop==='全軍'){ for(const k of TROOPS) byTag[r.base].hp[k]+=inc; }
+        else if(byTag[r.base].hp[r.troop]!==undefined){ byTag[r.base].hp[r.troop]+=inc; }
+      }
     }
   }
+
   const atk = troops.步.atk + troops.弓.atk + troops.騎.atk + troops.全軍.atk;
   const hp  = troops.步.hp  + troops.弓.hp  + troops.騎.hp  + troops.全軍.hp;
   const eq  = atk*weights.atk + hp*weights.hp;
-  return {troops,byTagTroop,atk,hp,eq};
+  return {troops, byTag, atk, hp, eq};
 }
 
 function calcAll(){
   const weights = STATE.weights, price = STATE.price;
   let kAtk=0,kHp=0,kEq=0,kGold=0;
-  const tagSum = { '狂熱':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},
-                   '基礎白字':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}},
-                   '領主隨隊':{步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0}} };
+  const tagSum = { '狂熱':{atk:{步:0,弓:0,騎:0}, hp:{步:0,弓:0,騎:0}}, '基礎白字':{atk:{步:0,弓:0,騎:0}, hp:{步:0,弓:0,騎:0}}, '領主隨隊':{atk:{步:0,弓:0,騎:0}, hp:{步:0,弓:0,騎:0}} };
   const troopSum = {步:{atk:0,hp:0},弓:{atk:0,hp:0},騎:{atk:0,hp:0},全軍:{atk:0,hp:0}};
 
   const listRows = [];
-
   for(const it of ITEMS){
     if(STATE.search && !it.name.includes(STATE.search)) continue;
     if(STATE.onlyChecked && !it.checked) continue;
 
-    const start = Math.max(5, Math.min(11, Number(it.lv)||5));
+    const startRaw = Number(it.lv)||5; const start = Math.max(5, Math.min(12, startRaw));
     let allRows=[], gold=0;
-    for(let lv=start; lv<=11; lv++){
-      allRows = allRows.concat(collectStepRows(it, lv));
-      gold += GOLD_BOOKS_FROM[lv]||0;
+    if(start<=11){ // Lv.12 直接 0
+      for(let lv=start; lv<=11; lv++){
+        allRows = allRows.concat(collectStepRows(it, lv));
+        gold += GOLD_BOOKS_FROM[lv]||0;
+      }
     }
     const agg = aggregate(allRows, weights);
     const cost = gold*price, unit = agg.eq>0? cost/agg.eq : Infinity;
@@ -369,10 +282,10 @@ function calcAll(){
 
     if(it.checked){
       kAtk+=agg.atk; kHp+=agg.hp; kEq+=agg.eq; kGold+=gold;
-      for(const tag of Object.keys(tagSum)){
-        for(const t of ['步','弓','騎']){
-          tagSum[tag][t].atk += agg.byTagTroop[tag][t].atk;
-          tagSum[tag][t].hp  += agg.byTagTroop[tag][t].hp;
+      for(const tag of TAGS){
+        for(const t of TROOPS){
+          tagSum[tag].atk[t]+= agg.byTag[tag].atk[t];
+          tagSum[tag].hp[t] += agg.byTag[tag].hp[t];
         }
       }
       for(const t of Object.keys(troopSum)){
@@ -381,18 +294,17 @@ function calcAll(){
       }
     }
   }
-
   return {listRows, kAtk,kHp,kEq,kGold, tagSum, troopSum};
 }
 
-/* ---------- 渲染 ---------- */
+/* ---- 渲染 ---- */
 function renderAll(){
   STATE.weights.atk = Number($('#wAtk').value)||1;
   STATE.weights.hp  = Number($('#wHp').value)||0.9;
   STATE.price       = Number($('#price').value)||1.76;
   const totalCnt   = ITEMS.length;
   const checkedCnt = ITEMS.reduce((n, it) => n + (it.checked ? 1 : 0), 0);
-  const badge = $('#cntArtifacts'); if (badge) badge.textContent = `文物：已選 ${checkedCnt} / 全部 ${totalCnt}`;
+  $('#cntArtifacts').textContent = `文物：已選 ${checkedCnt} / 全部 ${totalCnt}`;
   const {listRows, kAtk,kHp,kEq,kGold, tagSum, troopSum} = calcAll();
 
   // 左表
@@ -406,10 +318,7 @@ function renderAll(){
     td0.querySelector('input').addEventListener('change',e=>{ r.it.checked=e.target.checked; renderAll(); });
     tr.appendChild(td0);
 
-    const nameTd = document.createElement('td');
-    nameTd.className = 'cell-name';
-    nameTd.textContent = r.it.name;
-    tr.appendChild(nameTd);
+    const nameTd = document.createElement('td'); nameTd.className='cell-name'; nameTd.textContent = r.it.name; tr.appendChild(nameTd);
 
     const rc = r.it.rarity==='金'?'rar-gold':(r.it.rarity==='紫'?'rar-purple':'');
     const tdR=document.createElement('td'); tdR.innerHTML=`<span class="tag ${rc}">${r.it.rarity||''}</span>`; tr.appendChild(tdR);
@@ -425,43 +334,36 @@ function renderAll(){
     tr.appendChild(tdRight(nf(r.agg.atk)));
     tr.appendChild(tdRight(nf(r.agg.hp)));
     tr.appendChild(tdRight(nf(r.agg.eq)));
-    const tdB=tdRight(nf(r.gold,2)); tdB.title = `${nf(r.gold*6,0)} 紫書`; tr.appendChild(tdB); // 6＝PURPLE_PER_GOLD
+    const tdB=tdRight(nf(r.gold,2)); tdB.title = `${nf(r.gold*PURPLE_PER_GOLD,0)} 紫書`; tr.appendChild(tdB);
     tr.appendChild(tdRight(nf(r.cost)));
     tr.appendChild(tdRight(r.agg.eq>0?nf(r.cost/r.agg.eq):'—'));
-
     body.appendChild(tr);
   }
 
-  // KPI
   $('#kAtk').textContent=nf(kAtk); $('#kHp').textContent=nf(kHp); $('#kEq').textContent=nf(kEq);
   $('#kCost').textContent=`${nf(kGold,2)} / ${nf(kGold*STATE.price)}`;
-  $('#kConv').textContent=`≈ ${nf(kGold*6,0)} 紫書、${nf(kGold*36,0)} 藍書、${nf(kGold*216,0)} 綠書`;
+  $('#kConv').textContent=`≈ ${nf(kGold*PURPLE_PER_GOLD,0)} 紫書、${nf(kGold*BLUE_PER_GOLD,0)} 藍書、${nf(kGold*GREEN_PER_GOLD,0)} 綠書`;
 
-  renderSteps();        // 逐步性價比（推薦順序）
-  renderTotals(tagSum, troopSum);
+  renderSteps();
+  renderTagTotals(tagSum);
+  renderTroopTotals(troopSum);
 }
-
 function tdRight(txt){ const td=document.createElement('td'); td.className='right'; td.textContent=txt; return td; }
 
-/* 逐步性價比：列出所有勾選文物「當前→12」每一步，按元/等價屬性排序 */
 function renderSteps(){
   const tb = $('#tblSteps'); tb.innerHTML='';
-  const price = STATE.price, w = STATE.weights;
-  const rows = [];
-
+  const price = STATE.price, w = STATE.weights; const rows = [];
   for(const it of ITEMS){
-    if(!it.checked) continue;
-    const start = Math.max(5, Math.min(11, Number(it.lv)||5));
-    for(let lv=start; lv<=11; lv++){
+    if(!it.checked) continue; const current = Math.max(5, Math.min(12, Number(it.lv)||5));
+    if(current>11) continue; // Lv.12 不列步驟
+    for(let lv=current; lv<=11; lv++){
       const rws = collectStepRows(it, lv);
       const agg = aggregate(rws, w);
-      const gold = GOLD_BOOKS_FROM[lv]||0;
-      const cost = gold*price; const unit = agg.eq>0? cost/agg.eq : Infinity;
+      const gold = GOLD_BOOKS_FROM[lv]||0; const cost = gold*price; const unit = agg.eq>0? cost/agg.eq : Infinity;
       const tags = Array.from(new Set(it.rows.map(x=>x.base))).join(' / ');
-      rows.push({it, lv, agg, gold, cost, unit, tags});
+      rows.push({it, lv, agg, gold, cost, unit, tags, detailRows:rws});
     }
   }
-
   rows.sort((a,b)=>a.unit-b.unit);
   for(const r of rows){
     const tr = document.createElement('tr');
@@ -473,33 +375,30 @@ function renderSteps(){
       <td class="right">${nf(r.agg.atk)}</td>
       <td class="right">${nf(r.agg.hp)}</td>
       <td class="right">${nf(r.agg.eq)}</td>
-      <td class="right" title="${nf(r.gold*6,0)} 紫書">${nf(r.gold,2)}</td>
+      <td class="right" title="${nf(r.gold*PURPLE_PER_GOLD,0)} 紫書">${nf(r.gold,2)}</td>
       <td class="right">${nf(r.cost)}</td>
       <td class="right">${r.agg.eq>0?nf(r.cost/r.agg.eq):'—'}</td>`;
     tb.appendChild(tr);
   }
+  // 暫存步驟給匯出
+  window.__STEP_ROWS__ = rows;
 }
 
-/* 匯總（標籤＋兵種） */
-function renderTotals(tag, troop){
-  const tg = $('#tagTotals'); tg.innerHTML='';
-  const renderTag = (name,obj)=>{
-    const wrap = document.createElement('div'); wrap.className='table-wrap';
-    const tbl = document.createElement('table');
-    tbl.innerHTML = `
-      <thead><tr><th colspan="4" class="muted">${name}</th></tr>
-      <tr><th>兵種</th><th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th></tr></thead>
-      <tbody>
-        ${['步','弓','騎'].map(t=>{
-          const atk=obj[t].atk, hp=obj[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp;
-          return `<tr><td>${t}</td><td class="right">${nf(atk)}</td><td class="right">${nf(hp)}</td><td class="right">${nf(eq)}</td></tr>`;
-        }).join('')}
-      </tbody>`;
-    wrap.appendChild(tbl);
-    tg.appendChild(wrap);
-  };
-  renderTag('狂熱', tag['狂熱']); renderTag('基礎白字', tag['基礎白字']); renderTag('領主隨隊', tag['領主隨隊']);
+function renderTagTotals(tag){
+  const tb = $('#tagTotals'); tb.innerHTML='';
+  for(const tagName of TAGS){
+    const A = tag[tagName].atk, H = tag[tagName].hp;
+    const eq = (A.步 + A.弓 + A.騎) * STATE.weights.atk + (H.步 + H.弓 + H.騎) * STATE.weights.hp;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${tagName}</td>
+      <td class="right">${nf(A.步)}</td><td class="right">${nf(A.弓)}</td><td class="right">${nf(A.騎)}</td>
+      <td class="right">${nf(H.步)}</td><td class="right">${nf(H.弓)}</td><td class="right">${nf(H.騎)}</td>
+      <td class="right">${nf(eq)}</td>`;
+    tb.appendChild(tr);
+  }
+}
 
+function renderTroopTotals(troop){
   const tt = $('#troopTotals'); tt.innerHTML='';
   for(const t of ['步','弓','騎','全軍']){
     const atk=troop[t].atk, hp=troop[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp;
@@ -508,16 +407,41 @@ function renderTotals(tag, troop){
   }
 }
 
-/* 事件 */
+/* ---- 匯出 Excel（含加成標籤明細） ---- */
+function exportSteps(){
+  const rows = (window.__STEP_ROWS__||[]).map(r=>{
+    const A = r.agg.troops, tagBreak = {};
+    // 依標籤彙整此一步的細項，做成字串
+    for(const s of r.detailRows){
+      if(s.inc<=0) continue; const key = `${s.base}-${s.troop}-${s.kind==='atk'?'攻':'生'}`;
+      tagBreak[key] = (tagBreak[key]||0) + s.inc;
+    }
+    const detail = Object.entries(tagBreak).map(([k,v])=>`${k} ${nf(v)}`).join('；');
+    return {
+      文物:r.it.name, 等級:`Lv.${r.lv}→${r.lv+1}`, 標籤:Array.from(new Set(r.it.rows.map(x=>x.base))).join('/'),
+      步攻:nf(A.步.atk), 弓攻:nf(A.弓.atk), 騎攻:nf(A.騎.atk),
+      步生:nf(A.步.hp),  弓生:nf(A.弓.hp),  騎生:nf(A.騎.hp),
+      攻擊:nf(r.agg.atk), 生命:nf(r.agg.hp), 等價屬性:nf(r.agg.eq),
+      金書:nf(r.gold,2), 金額:nf(r.cost), 元每屬性: r.agg.eq>0? nf(r.cost/r.agg.eq) : '—',
+      加成明細: detail
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '逐步性價比');
+  XLSX.writeFile(wb, '逐步性價比.xlsx');
+}
+$('#btnExport').addEventListener('click', exportSteps);
+
+/* ---- 事件 ---- */
 $('#wAtk').addEventListener('input',renderAll);
 $('#wHp').addEventListener('input',renderAll);
 $('#price').addEventListener('input',renderAll);
 $('#onlyChecked').addEventListener('change',e=>{STATE.onlyChecked=e.target.checked;renderAll();});
 $('#search').addEventListener('input',e=>{STATE.search=e.target.value.trim();renderAll();});
 
-/* 初始化 */
+/* ---- 啟動 ---- */
 loadExcel();
-updateTraffic();
 </script>
 </body>
 </html>
