@@ -86,7 +86,7 @@
     <div class="card"><div class="muted">今日訪客（近似 UV）</div><div id="visToday" style="font-size:22px">讀取中…</div></div>
     <div class="card"><div class="muted">累計訪客（近似 UV）</div><div id="visTotal" style="font-size:22px">讀取中…</div></div>
     <div class="card"><div class="muted">統計區間（Paramaribo）</div><div id="visTime" class="hint">America/Paramaribo</div></div>
-    <div class="card"><div class="muted">資料來源</div><div class="hint">CountAPI（無後端、可直接用）</div></div>
+    <div class="card"><div class="muted">資料來源</div><div class="hint">CounterAPI（api.counterapi.dev / V1 公開端點）</div></div>
   </div>
 
   <div class="flex toolbar">
@@ -142,23 +142,66 @@
 </div>
 
 <script>
+/* ---------- 常用工具 ---------- */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const nf = (n,d=2)=> (Math.round((+n||0)*10**d)/10**d).toFixed(d);
 
+/* ---------- 流量統計（改用 CounterAPI） ---------- */
 const CF_TZ = 'America/Paramaribo';
-const NS = encodeURIComponent(location.host + location.pathname.replace(/\W+/g,'_'));
-
+// 命名空間：host + path（去除非字元）；與原 CountAPI 相同概念
+const NS = (location.host + location.pathname.replace(/\W+/g,'_'));
+// 封裝 CounterAPI V1：/v1/:namespace/:name/up  及  /v1/:namespace/:name
+async function hit(key){
+  const url = `https://api.counterapi.dev/v1/${encodeURIComponent(NS)}/${encodeURIComponent(key)}/up`;
+  const r = await fetch(url, {mode:'cors', cache:'no-store'});
+  if(!r.ok) throw new Error('hit '+key+' '+r.status);
+  const j = await r.json();
+  return (j && typeof j.count === 'number') ? j.count : 0;
+}
+async function get(key){
+  const url = `https://api.counterapi.dev/v1/${encodeURIComponent(NS)}/${encodeURIComponent(key)}`;
+  const r = await fetch(url, {mode:'cors', cache:'no-store'});
+  if(!r.ok) throw new Error('get '+key+' '+r.status);
+  const j = await r.json();
+  return (j && typeof j.count === 'number') ? j.count : 0;
+}
+function todayStr(){
+  const d = new Date(new Date().toLocaleString('en-US',{timeZone: CF_TZ}));
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function getUid(){ let id = localStorage.getItem('mx_uid'); if(!id){ id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=> (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)); localStorage.setItem('mx_uid', id);} return id; }
-function todayStr(){ const d = new Date(new Date().toLocaleString('en-US',{timeZone: CF_TZ})); const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
-async function hit(key){ const r = await fetch(`https://api.countapi.xyz/hit/${NS}/${key}`); if(!r.ok) throw new Error('hit '+key+' '+r.status); const j = await r.json(); return j.value ?? 0; }
-async function get(key){ const r = await fetch(`https://api.countapi.xyz/get/${NS}/${key}`); if(!r.ok) throw new Error('get '+key+' '+r.status); const j = await r.json(); return j.value ?? 0; }
-async function updateTraffic(){ getUid(); const today = todayStr(); if(!localStorage.getItem('mx_total_counted')){ try{ await hit('total_unique'); localStorage.setItem('mx_total_counted','1'); }catch(e){} } const last = localStorage.getItem('mx_last_counted_date'); if(last !== today){ try{ await hit('day_'+today+'_unique'); localStorage.setItem('mx_last_counted_date', today); }catch(e){} } let total = 0, daily = 0; try{ total = await get('total_unique'); }catch(e){} try{ daily = await get('day_'+today+'_unique'); }catch(e){} $('#visToday').textContent = daily ? String(daily) : '—'; $('#visTotal').textContent = total ? String(total) : '—'; $('#visTime').textContent  = `${today} 00:00–23:59 ${CF_TZ}`; }
 
+async function updateTraffic(){
+  getUid();
+  const today = todayStr();
+  // 累計唯一訪客：此瀏覽器首次造訪才 +1
+  if(!localStorage.getItem('mx_total_counted')){
+    try{ await hit('total_unique'); localStorage.setItem('mx_total_counted','1'); }
+    catch(e){ console.warn('[CounterAPI] total_unique hit failed:', e); }
+  }
+  // 今日唯一訪客：此瀏覽器在「今日」首次造訪才 +1
+  const last = localStorage.getItem('mx_last_counted_date');
+  if(last !== today){
+    try{ await hit('day_'+today+'_unique'); localStorage.setItem('mx_last_counted_date', today); }
+    catch(e){ console.warn('[CounterAPI] day hit failed:', e); }
+  }
+  // 讀值（就算 hit 失敗也盡量顯示現有值）
+  let total = 0, daily = 0;
+  try{ total = await get('total_unique'); }catch(e){ console.warn('[CounterAPI] get total failed:', e); }
+  try{ daily = await get('day_'+today+'_unique'); }catch(e){ console.warn('[CounterAPI] get daily failed:', e); }
+  $('#visToday').textContent = daily ? String(daily) : '—';
+  $('#visTotal').textContent = total ? String(total) : '—';
+  $('#visTime').textContent  = `${today} 00:00–23:59 ${CF_TZ}`;
+}
+
+/* ---------- 遊戲邏輯 ---------- */
 const CUM_PCT = {5:0.40,6:0.48,7:0.56,8:0.64,9:0.73,10:0.82,11:0.91,12:1.00};
 const GOLD_BOOKS_FROM = {5:40/6, 6:80/6, 7:120/6, 8:40, 9:80, 10:120, 11:160};
 const PURPLE_PER_GOLD = 6, BLUE_PER_GOLD = 36, GREEN_PER_GOLD = 216;
-
 let RAW = []; let ITEMS = []; let STATE = {weights:{atk:1, hp:0.9}, price:1.76, onlyChecked:false, search:''};
 
 async function loadExcel(){
@@ -192,9 +235,9 @@ function renderAll(){ STATE.weights.atk = Number($('#wAtk').value)||1; STATE.wei
 
 function tdRight(txt){ const td=document.createElement('td'); td.className='right'; td.textContent=txt; return td; }
 
-function renderSteps(){ const tb = $('#tblSteps'); tb.innerHTML=''; const price = STATE.price, w = STATE.weights; const rows = []; for(const it of ITEMS){ if(!it.checked) continue; const curLv = Math.max(5, Math.min(12, Number(it.lv)||5)); if (curLv <= 11) { for(let lv=curLv; lv<=11; lv++){ const rws = collectStepRows(it, lv); const agg = aggregate(rws, w); const gold = GOLD_BOOKS_FROM[lv]||0; const cost = gold*price; const unit = agg.eq>0? cost/agg.eq : Infinity; const tags = Array.from(new Set(it.rows.map(x=>x.base))).join(' / '); rows.push({it, lv, agg, gold, cost, unit, tags}); } } } rows.sort((a,b)=>a.unit-b.unit); for(const r of rows){ const tr = document.createElement('tr'); tr.innerHTML = ` <td class="cell-name"><div class="flex"><b>Lv.${r.lv}→${r.lv+1}</b> ${r.it.name} <span class="tag">${r.tags}</span></div></td> <td class="right">${nf(r.agg.troops.步.atk)}</td> <td class="right">${nf(r.agg.troops.弓.atk)}</td> <td class="right">${nf(r.agg.troops.騎.atk)}</td> <td class="right">${nf(r.agg.atk)}</td> <td class="right">${nf(r.agg.hp)}</td> <td class="right">${nf(r.agg.eq)}</td> <td class="right" title="${nf(r.gold*PURPLE_PER_GOLD,0)} 紫書">${nf(r.gold,2)}</td> <td class="right">${nf(r.cost)}</td> <td class="right">${r.agg.eq>0?nf(r.cost/r.agg.eq):'—'}</td>`; tb.appendChild(tr);} }
+function renderSteps(){ const tb = $('#tblSteps'); tb.innerHTML=''; const price = STATE.price, w = STATE.weights; const rows = []; for(const it of ITEMS){ if(!it.checked) continue; const curLv = Math.max(5, Math.min(12, Number(it.lv)||5)); if (curLv <= 11) { for(let lv=curLv; lv<=11; lv++){ const rws = collectStepRows(it, lv); const agg = aggregate(rws, w); const gold = GOLD_BOOKS_FROM[lv]||0; const cost = gold*price; const unit = agg.eq>0? cost/agg.eq : Infinity; const tags = Array.from(new Set(it.rows.map(x=>x.base))).join(' / '); rows.push({it, lv, agg, gold, cost, unit, tags}); } } } rows.sort((a,b)=>a.unit-b.unit); for(const r of rows){ const tr = document.createElement('tr'); tr.innerHTML = ` <td class=\"cell-name\"><div class=\"flex\"><b>Lv.${r.lv}→${r.lv+1}</b> ${r.it.name} <span class=\"tag\">${r.tags}</span></div></td> <td class=\"right\">${nf(r.agg.troops.步.atk)}</td> <td class=\"right\">${nf(r.agg.troops.弓.atk)}</td> <td class=\"right\">${nf(r.agg.troops.騎.atk)}</td> <td class=\"right\">${nf(r.agg.atk)}</td> <td class=\"right\">${nf(r.agg.hp)}</td> <td class=\"right\">${nf(r.agg.eq)}</td> <td class=\"right\" title=\"${nf(r.gold*PURPLE_PER_GOLD,0)} 紫書\">${nf(r.gold,2)}</td> <td class=\"right\">${nf(r.cost)}</td> <td class=\"right\">${r.agg.eq>0?nf(r.cost/r.agg.eq):'—'}</td>`; tb.appendChild(tr);} }
 
-function renderTotals(tag, troop){ const tg = $('#tagTotals'); tg.innerHTML=''; const renderTag = (name,obj)=>{ const wrap = document.createElement('div'); wrap.className='table-wrap'; const tbl = document.createElement('table'); tbl.innerHTML = ` <thead><tr><th colspan="4" class="muted">${name}</th></tr> <tr><th>兵種</th><th class="right">攻擊</th><th class="right">生命</th><th class="right">等價屬性</th></tr></thead> <tbody> ${['步','弓','騎'].map(t=>{ const atk=obj[t].atk, hp=obj[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; return `<tr><td>${t}</td><td class="right">${nf(atk)}</td><td class="right">${nf(hp)}</td><td class="right">${nf(eq)}</td></tr>`; }).join('')} </tbody>`; wrap.appendChild(tbl); tg.appendChild(wrap); }; renderTag('狂熱', tag['狂熱']); renderTag('基礎白字', tag['基礎白字']); renderTag('領主隨隊', tag['領主隨隊']); const tt = $('#troopTotals'); tt.innerHTML=''; for(const t of ['步','弓','騎','全軍']){ const atk=troop[t].atk, hp=troop[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; const tr=document.createElement('tr'); tr.innerHTML=`<td>${t}</td><td class="right">${nf(atk)}</td><td class="right">${nf(hp)}</td><td class="right">${nf(eq)}</td>`; tt.appendChild(tr); } }
+function renderTotals(tag, troop){ const tg = $('#tagTotals'); tg.innerHTML=''; const renderTag = (name,obj)=>{ const wrap = document.createElement('div'); wrap.className='table-wrap'; const tbl = document.createElement('table'); tbl.innerHTML = ` <thead><tr><th colspan=\"4\" class=\"muted\">${name}</th></tr> <tr><th>兵種</th><th class=\"right\">攻擊</th><th class=\"right\">生命</th><th class=\"right\">等價屬性</th></tr></thead> <tbody> ${['步','弓','騎'].map(t=>{ const atk=obj[t].atk, hp=obj[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; return `<tr><td>${t}</td><td class=\"right\">${nf(atk)}</td><td class=\"right\">${nf(hp)}</td><td class=\"right\">${nf(eq)}</td></tr>`; }).join('')} </tbody>`; wrap.appendChild(tbl); tg.appendChild(wrap); }; renderTag('狂熱', tag['狂熱']); renderTag('基礎白字', tag['基礎白字']); renderTag('領主隨隊', tag['領主隨隊']); const tt = $('#troopTotals'); tt.innerHTML=''; for(const t of ['步','弓','騎','全軍']){ const atk=troop[t].atk, hp=troop[t].hp, eq=atk*STATE.weights.atk + hp*STATE.weights.hp; const tr=document.createElement('tr'); tr.innerHTML=`<td>${t}</td><td class=\"right\">${nf(atk)}</td><td class=\"right\">${nf(hp)}</td><td class=\"right\">${nf(eq)}</td>`; tt.appendChild(tr); } }
 
 $('#wAtk').addEventListener('input',renderAll);
 $('#wHp').addEventListener('input',renderAll);
@@ -202,7 +245,7 @@ $('#price').addEventListener('input',renderAll);
 $('#onlyChecked').addEventListener('change',e=>{STATE.onlyChecked=e.target.checked;renderAll();});
 $('#search').addEventListener('input',e=>{STATE.search=e.target.value.trim();renderAll();});
 
-// ====== Excel 匯出：把「逐步性價比」依目前勾選狀態輸出成 .xlsx ======
+/* ====== Excel 匯出：把「逐步性價比」依目前勾選狀態輸出成 .xlsx ====== */
 function autoColWidths(data, headers){ const cols = headers.map(h=>({wch: Math.max( (h||'').toString().length, 6 ) })); for(const row of data){ headers.forEach((h,i)=>{ const v = row[h]; const len = (v===null||v===undefined)?0:String(v).length; if(len > cols[i].wch) cols[i].wch = len; }); } return cols; }
 
 function exportStepsToExcel(){
@@ -302,7 +345,9 @@ function exportStepsToExcel(){
 
 $('#btnExport').addEventListener('click', exportStepsToExcel);
 
-loadExcel(); updateTraffic();
+/* 初始化 */
+loadExcel();
+updateTraffic();
 </script>
 </body>
 </html>
